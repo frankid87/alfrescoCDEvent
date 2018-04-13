@@ -1,0 +1,145 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:context="http://www.springframework.org/schema/context"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-3.1.xsd
+  http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context-3.1.xsd">
+
+	<!-- Licensed to the Apache Software Foundation (ASF) under one or more 
+		contributor license agreements. See the NOTICE file distributed with this 
+		work for additional information regarding copyright ownership. The ASF licenses 
+		this file to You under the Apache License, Version 2.0 (the "License"); you 
+		may not use this file except in compliance with the License. You may obtain 
+		a copy of the License at http://www.apache.org/licenses/LICENSE-2.0 Unless 
+		required by applicable law or agreed to in writing, software distributed 
+		under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES 
+		OR CONDITIONS OF ANY KIND, either express or implied. See the License for 
+		the specific language governing permissions and limitations under the License. -->
+
+
+	<beans profile="amqp">
+		<!-- Services -->
+		<bean id="alfrescoNodeService" class="com.objectway.alfresco.service.AlfrescoNodeService">
+			<property name="serviceRegistry" ref="ServiceRegistry" />
+			<property name="depthFolderPath">
+				<value>${folderpath.position.start}</value>
+			</property>
+			<property name="tenantFolderPathPosition">
+				<value>${folderpath.position.tenant}</value>
+			</property>
+		</bean>
+
+		<!-- Behaviour classes -->
+		<bean id="documentEventListener" class="com.objectway.alfresco.behaviour.listener.DocumentEventListener">
+			<property name="rabbitMQProvider" ref="rabbitMQProvider" />
+		</bean>
+		<bean id="onAddDocumentPolicies" class="com.objectway.alfresco.behaviour.policies.OnAddDocumentPolicies">
+			<property name="documentEventListener" ref="documentEventListener" />
+			<property name="alfrescoNodeService" ref="alfrescoNodeService" />
+		</bean>
+		<bean id="deleteDocumentPolicies" class="com.objectway.alfresco.behaviour.policies.DeleteDocumentPolicies">
+			<property name="documentEventListener" ref="documentEventListener" />
+			<property name="alfrescoNodeService" ref="alfrescoNodeService" />
+		</bean>
+		<!-- bean id="onUpdateDocumentPolicies" class="com.objectway.alfresco.behaviour.policies.OnUpdateDocumentPolicies"> 
+			<property name="rabbitMQProvider" ref="rabbitMQProvider" /> </bean -->
+		<bean id="com.objectway.alfresco.behaviour.handler.documentEventHandler"
+			class="com.objectway.alfresco.behaviour.handler.DocumentEventHandler"
+			init-method="registerEventHandlers" depends-on="dictionaryBootstrap">
+			<property name="policyComponent" ref="policyComponent" />
+			<property name="onAddDocumentPolicies" ref="onAddDocumentPolicies" />
+			<property name="deleteDocumentPolicies" ref="deleteDocumentPolicies" />
+			<!-- property name="onUpdateDocumentPolicies" ref="onUpdateDocumentPolicies"/ -->
+		</bean>
+
+		<!-- RabbitMQ beans -->
+		<bean id="jsonConverter"
+			class="org.springframework.amqp.support.converter.Jackson2JsonMessageConverter" />
+
+		<beans profile="!ssl">
+			<!-- RabbitMQ beans -->
+			<bean id="amqpTemplate" class="org.springframework.amqp.rabbit.core.RabbitTemplate">
+				<constructor-arg ref="amqpFactory" />
+				<property name="messageConverter" ref="jsonConverter" />
+			</bean>
+			<bean id="rabbitMQProvider"
+				class="com.objectway.alfresco.messagebroker.provider.RabbitMQProvider">
+				<property name="amqpTemplate" ref="amqpTemplate" />
+				<property name="exchange">
+					<value>${exchange.name}</value>
+				</property>
+				<property name="headers">
+					<value>#{'${amqp.headers}'.split('${amqp.headers.separator}')}</value>
+				</property>
+				<property name="headersSeparatorLog">
+					<value>${amqp.headers.separator}</value>
+				</property>
+				<property name="headersLog">
+					<value>${amqp.headers}</value>
+				</property>				
+			</bean>
+			<bean id="amqpFactory"
+				class="org.springframework.amqp.rabbit.connection.CachingConnectionFactory">
+				<property name="uri">
+					<value>${messagebroker.url}</value>
+				</property>
+			</bean>
+		</beans>
+
+		<beans profile="ssl">
+			<!-- RabbitMQ beans -->
+			<bean id="rabbitConnection"
+				class="org.springframework.amqp.rabbit.connection.RabbitConnectionFactoryBean">
+				<property name="trustStore">
+					<value>${ssl.trustore.location}</value>
+				</property>
+				<property name="trustStorePassphrase">
+					<value>${ssl.trustore.passphrase}</value>
+				</property>
+				<property name="trustStoreType">
+					<value>${ssl.trustore.type}</value>
+				</property>
+
+				<property name="keyStore">
+					<value>${ssl.keystore.location}</value>
+				</property>
+				<property name="keyStorePassphrase">
+					<value>${ssl.keystore.passphrase}</value>
+				</property>
+				<property name="keyStoreType">
+					<value>${ssl.keystore.type}</value>
+				</property>
+
+				<property name="useSSL">
+					<value>true</value>
+				</property>
+
+				<property name="port">
+					<value>5671</value>
+				</property>
+			</bean>
+
+			<bean id="amqpFactory"
+				class="org.springframework.amqp.rabbit.connection.CachingConnectionFactory">
+				<constructor-arg ref="rabbitConnection" />
+				<property name="uri">
+					<value>${messagebroker.url}</value>
+				</property>
+			</bean>
+
+			<bean id="amqpTemplate" class="org.springframework.amqp.rabbit.core.RabbitTemplate">
+				<constructor-arg ref="amqpFactory" />
+				<property name="messageConverter" ref="jsonConverter" />
+			</bean>
+
+			<bean id="rabbitMQProvider"
+				class="com.objectway.alfresco.messagebroker.provider.RabbitMQProvider">
+				<property name="amqpTemplate" ref="amqpTemplate" />
+				<property name="exchange">
+					<value>${exchange.name}</value>
+				</property>
+			</bean>
+
+		</beans>
+
+	</beans>
+</beans>
